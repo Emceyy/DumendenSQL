@@ -173,3 +173,92 @@ WHERE
     p.id IN (
         SELECT post_id FROM post_tags WHERE tag_id = (SELECT id FROM tags WHERE tag_name = 'postgresql')
     );
+
+
+-- =================================================================
+-- DAHA İLERİ SEVİYE SORGULAR
+-- =================================================================
+
+-- Sorgu 6: Her yazının başlığını ve etiketlerini tek bir satırda, virgülle ayrılmış olarak birleştirme. (CTE, STRING_AGG)
+WITH PostWithTags AS (
+    SELECT
+        p.id,
+        p.title,
+        t.tag_name
+    FROM
+        posts p
+    JOIN
+        post_tags pt ON p.id = pt.post_id
+    JOIN
+        tags t ON pt.tag_id = t.id
+)
+SELECT
+    pwt.title,
+    STRING_AGG(pwt.tag_name, ', ') AS tags
+FROM
+    PostWithTags pwt
+GROUP BY
+    pwt.id, pwt.title
+ORDER BY
+    pwt.title;
+
+
+-- Sorgu 7: Her yazarın en son yazdığı yazıyı bulma. (Window Function, RANK, CTE)
+WITH RankedPosts AS (
+    SELECT
+        a.username,
+        p.title,
+        p.published_at,
+        RANK() OVER (PARTITION BY a.id ORDER BY p.published_at DESC) as rank_num
+    FROM
+        authors a
+    JOIN
+        posts p ON a.id = p.author_id
+)
+SELECT
+    username,
+    title,
+    published_at
+FROM
+    RankedPosts
+WHERE
+    rank_num = 1;
+
+
+-- Sorgu 8: En çok yoruma sahip ilk 3 yazıyı ve yorum sayılarını bulma. (JOIN, GROUP BY, ORDER BY, LIMIT)
+SELECT
+    p.title,
+    COUNT(c.id) AS comment_count
+FROM
+    posts p
+JOIN
+    comments c ON p.id = c.post_id
+GROUP BY
+    p.id, p.title
+ORDER BY
+    comment_count DESC
+LIMIT 3;
+
+
+-- Sorgu 9: Yazarların gönderileri arasındaki ortalama süreyi bulma. (Window Function, LAG)
+WITH PostPublicationGaps AS (
+    SELECT
+        author_id,
+        published_at,
+        LAG(published_at, 1) OVER (PARTITION BY author_id ORDER BY published_at) AS previous_post_date
+    FROM
+        posts
+)
+SELECT
+    a.username,
+    AVG(published_at - previous_post_date) AS average_time_between_posts
+FROM
+    PostPublicationGaps ppg
+JOIN
+    authors a ON ppg.author_id = a.id
+WHERE
+    ppg.previous_post_date IS NOT NULL
+GROUP BY
+    a.username
+ORDER BY
+    average_time_between_posts;
